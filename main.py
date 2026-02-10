@@ -370,3 +370,181 @@ def dfs(initial_state, max_depth=1000):
         'max_depth_reached': max_depth_reached
     }
     return None, None, stats
+
+# ============================================================================
+# INFORMED SEARCH ALGORITHMS
+# ============================================================================
+
+def astar(initial_state):
+    """
+    A* Search - Thuật toán tìm kiếm tối ưu với heuristic.
+    
+    A* kết hợp cost thực tế g(n) và heuristic h(n):
+        f(n) = g(n) + h(n)
+    
+    Trong đó:
+        - g(n): Chi phí thực tế từ start đến node n
+        - h(n): Ước lượng chi phí từ n đến goal (heuristic)
+        - f(n): Ước lượng tổng chi phí từ start qua n đến goal
+    
+    NGUYÊN LÝ:
+        - Mở rộng node có f(n) nhỏ nhất
+        - Sử dụng Priority Queue (min-heap) để lưu frontier
+        - Đảm bảo tìm được đường đi tối ưu nếu h(n) admissible
+    """
+    if is_goal(initial_state):
+        return initial_state, [initial_state], {'nodes_explored': 0, 'max_frontier_size': 1}
+    
+    # Priority queue: (f_score, counter, g_score, state, path)
+    # counter để break ties khi f_score bằng nhau
+    counter = 0
+    g_score = 0  # Cost từ start đến initial_state
+    h_score = heuristic(initial_state)
+    f_score = g_score + h_score
+    
+    frontier = [(f_score, counter, g_score, initial_state, [initial_state])]
+    visited = {initial_state}
+    
+    # Thống kê
+    nodes_explored = 0
+    max_frontier_size = 1
+    
+    while frontier:
+        max_frontier_size = max(max_frontier_size, len(frontier))
+        
+        # Lấy node có f_score nhỏ nhất
+        current_f, _, current_g, current_state, path = heapq.heappop(frontier)
+        nodes_explored += 1
+        
+        # Sinh các trạng thái kế tiếp
+        for successor in get_successors(current_state):
+            if successor not in visited:
+                visited.add(successor)
+                counter += 1
+                
+                # Tính các score cho successor
+                new_g = current_g + 1  # Cost mỗi bước = 1
+                new_h = heuristic(successor)
+                new_f = new_g + new_h
+                new_path = path + [successor]
+                
+                # Kiểm tra đích
+                if is_goal(successor):
+                    stats = {
+                        'nodes_explored': nodes_explored,
+                        'max_frontier_size': max_frontier_size,
+                        'path_length': len(new_path),
+                        'visited_states': len(visited),
+                        'path_cost': new_g
+                    }
+                    return successor, new_path, stats
+                
+                # Thêm vào frontier
+                heapq.heappush(frontier, (new_f, counter, new_g, successor, new_path))
+    
+    # Không tìm thấy solution
+    stats = {
+        'nodes_explored': nodes_explored,
+        'max_frontier_size': max_frontier_size,
+        'visited_states': len(visited)
+    }
+    return None, None, stats
+
+def hill_climbing(initial_state, max_iterations=10000):
+    """
+    Hill Climbing - Thuật toán tìm kiếm local search.
+    
+    NGUYÊN LÝ:
+        - Bắt đầu từ state hiện tại
+        - Chọn successor có h(n) NHỎ NHẤT (gần goal nhất)
+        - Di chuyển đến successor đó
+        - Lặp lại cho đến khi đạt goal hoặc stuck
+    
+    LƯU Ý:
+        - h(n) NHỎ → GẦN GOAL hơn
+        - Chọn successor có h(n) nhỏ nhất = greedy best-first
+    """
+    if is_goal(initial_state):
+        return initial_state, [initial_state], {'nodes_explored': 0, 'iterations': 0}
+    
+    current_state = initial_state
+    path = [initial_state]
+    visited = {initial_state}
+    
+    # Thống kê
+    nodes_explored = 0
+    iterations = 0
+    max_successors_size = 0
+    
+    for iterations in range(max_iterations):
+        # Sinh các successors
+        successors = get_successors(current_state)
+        
+        # Lọc bỏ các state đã thăm (để tránh vòng lặp)
+        unvisited_successors = [s for s in successors if s not in visited]
+        
+        if not unvisited_successors:
+            # Stuck - không còn successor chưa thăm
+            stats = {
+                'nodes_explored': nodes_explored,
+                'iterations': iterations,
+                'visited_states': len(visited),
+                'stuck': True,
+                'reason': 'No unvisited successors'
+            }
+            return None, path, stats
+        
+        max_successors_size = max(max_successors_size, len(unvisited_successors))
+        
+        # Tính h(n) cho tất cả successors
+        successors_with_h = []
+        for successor in unvisited_successors:
+            h_value = heuristic(successor)
+            successors_with_h.append((h_value, successor))
+            nodes_explored += 1
+            
+            # Kiểm tra nếu successor là goal
+            if is_goal(successor):
+                new_path = path + [successor]
+                stats = {
+                    'nodes_explored': nodes_explored,
+                    'iterations': iterations + 1,
+                    'path_length': len(new_path),
+                    'visited_states': len(visited) + 1,
+                    'max_successors_size': max_successors_size
+                }
+                return successor, new_path, stats
+        
+        # Sắp xếp theo h(n) tăng dần (nhỏ nhất = tốt nhất)
+        successors_with_h.sort(key=lambda x: x[0])
+        
+        # Chọn successor tốt nhất (h(n) nhỏ nhất)
+        best_h, best_successor = successors_with_h[0]
+        current_h = heuristic(current_state)
+        
+        # Kiểm tra có cải thiện không
+        if best_h >= current_h:
+            # Stuck at local minimum - successor tốt nhất vẫn tệ hơn hoặc bằng hiện tại
+            stats = {
+                'nodes_explored': nodes_explored,
+                'iterations': iterations + 1,
+                'visited_states': len(visited),
+                'stuck': True,
+                'reason': f'Local minimum (current h={current_h}, best successor h={best_h})'
+            }
+            return None, path, stats
+        
+        # Di chuyển đến successor tốt nhất
+        current_state = best_successor
+        path.append(best_successor)
+        visited.add(best_successor)
+    
+    # Đã đạt max_iterations
+    stats = {
+        'nodes_explored': nodes_explored,
+        'iterations': max_iterations,
+        'visited_states': len(visited),
+        'stuck': True,
+        'reason': 'Max iterations reached'
+    }
+    return None, path, stats

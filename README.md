@@ -100,7 +100,6 @@ python3 test_comparison.py
 | 4x4 (hard)  | ?     | >60s    | >60s     | ?       |
 | 5x5+        | ?     | ???     | ???      | ???     |
 
-**Kết luận:** Game này KHÓ HƠN NHIỀU so với Flow Free! Search space lớn hơn rất nhiều.
 
 ---
 
@@ -135,33 +134,7 @@ E = T_JUNCTION ┴ (rotation 3)
 
 ---
 
-## Example Usage
 
-```python
-from main import PipeState, astar, count_open_ends
-
-# Tạo puzzle
-puzzle = PipeState.from_string("""
-    L-7
-    |.|
-    r-J
-""")
-
-print(f"Open ends: {count_open_ends(puzzle)}")  # 6
-
-# Tìm solution (với progress indicator)
-solution, path, stats = astar(puzzle, show_progress=True)
-
-if solution:
-    print(f"Found solution in {stats['nodes_explored']} nodes!")
-    print(f"Open ends: {count_open_ends(solution)}")  # 0
-
-# Hoặc không optimize (để so sánh)
-# from main import get_successors
-# successors = get_successors(puzzle, optimized=False)  # Chậm hơn
-```
-
----
 
 ## Lưu ý quan trọng
 
@@ -186,36 +159,3 @@ if solution:
 - Iterative Deepening A* (IDA*)
 - Pattern database
 - Parallel search
-
----
-
-## Tham khảo
-
-- **Game gốc:** https://puzzles-mobile.com/pipes/random/7x7-wrap
-- **Wikipedia:** https://en.wikipedia.org/wiki/Pipe_Mania
-- **So sánh với phiên bản cũ:** Xem `MIGRATION_SUMMARY.md`
-
----
-
-## Next Steps
-
-### **Để test ngay:**
-1. `python3 test_simple.py` - Test nhanh
-2. Xem kết quả và hiểu cách game hoạt động
-3. Tạo puzzle riêng và test
-
-### **Để tạo test cases (cho phần tiếp theo):**
-- Đọc `MIGRATION_SUMMARY.md` để hiểu input format
-- Tạo 10-15 file .txt theo format mới
-- Bao gồm: easy, medium, hard, unsolvable, wrap cases
-
-### **Để tối ưu hóa (nếu cần):**
-- Đọc code `main.py`, tập trung vào `get_successors()` và `heuristic()`
-- Thử các heuristic khác nhau
-- Profile code để tìm bottleneck
-
----
-
-**Tóm lại:** Code đã được viết lại HOÀN TOÀN theo logic game Pipe Rotation!
-
-Puzzle nhỏ (2x2, 3x3) chạy tốt. Puzzle lớn hơn cần thuật toán tối ưu. Nếu cần test 7x7 đầy đủ, có thể cần cải tiến heuristic hoặc dùng thuật toán khác (IDA*, bidirectional search, etc.)

@@ -75,12 +75,6 @@ class Tile:
         return f"Tile({self.type.name}, rot={self.rotation})"
     
     def to_char(self) -> str:
-        """
-        Chuyển tile thành ký tự hiển thị.
-        
-        Returns:
-            Ký tự đại diện cho tile
-        """
         if self.type == TileType.EMPTY:
             return ' '
         

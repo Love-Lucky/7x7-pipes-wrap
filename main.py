@@ -1,290 +1,347 @@
-class PipeState:
-    def __init__(self, grid, current_positions, goals, size=7):
-        """
-        grid: 2D list where 0 is empty, colors are strings/ints.
-        current_positions: Dict {color: (r, c)} of the moving end of the pipe.
-        goals: Dict {color: (r, c)} of the fixed destination.
-        """
-        self.grid = [row[:] for row in grid]
-        self.current_positions = current_positions
-        self.goals = goals
-        self.size = size
+# ============================================================================
+# 7x7 PIPES WRAP PUZZLE - PIPE ROTATION VERSION
+# ============================================================================
 
-    def __eq__(self, other):
-        return self.grid == other.grid and self.current_positions == other.current_positions
-
-    def __hash__(self):
-        # Stable hash: Sort dictionary items to ensure same hash regardless of insertion order
-        return hash((tuple(tuple(row) for row in self.grid), tuple(sorted(self.current_positions.items()))))
-
-    def __lt__(self, other):
-        # Required for priority queues (heapq). 
-        # Tie-breaking can be arbitrary, we'll use the grid state.
-        return self.grid < other.grid
-
-    @staticmethod
-    def from_string(grid_str):
-        """
-        Parses a string representation of the grid.
-        Letters (A-Z) are endpoints. '.' or '0' are empty.
-        Returns a PipeState.
-        """
-        lines = [line.strip() for line in grid_str.strip().splitlines() if line.strip()]
-        grid = []
-        positions = {}
-        goals = {}
-        
-        # Temporary storage to pair up endpoints
-        endpoints = {}
-        
-        for r, line in enumerate(lines):
-            row = []
-            for c, char in enumerate(line):
-                if char in '.0':
-                    row.append(0)
-                else:
-                    # It's a color endpoint
-                    row.append(char)
-                    if char not in endpoints:
-                        endpoints[char] = []
-                    endpoints[char].append((r, c))
-            grid.append(row)
-            
-        # Assign start/end. 
-        # Arbitrarily pick first occurrence as "current_position" (head) and second as "goal".
-        # In a real search, this might swap dynamically, but for init it's fine.
-        for color, points in endpoints.items():
-            if len(points) != 2:
-                raise ValueError(f"Color {color} must have exactly 2 endpoints, found {len(points)}")
-            positions[color] = points[0]
-            goals[color] = points[1]
-            
-        return PipeState(grid, positions, goals, size=len(grid))
-
-def is_goal(state):
-    # 1. Check if all path heads have reached their goals
-    for color, pos in state.current_positions.items():
-        if pos != state.goals[color]:
-            return False
-    
-    # 2. Check if the grid is completely filled (no zeros)
-    for row in state.grid:
-        if 0 in row:
-            return False
-            
-    return True
-
-def get_successors(state):
-    successors = []
-    
-    # Identify the first color that still needs to move
-    active_color = None
-    for color, pos in state.current_positions.items():
-        if pos != state.goals[color]:
-            active_color = color
-            break
-            
-    if active_color is None:
-        return []
-
-    r, c = state.current_positions[active_color]
-    target = state.goals[active_color]
-
-    # Standard moves + Wrap-around moves
-    # (dr, dc): Up, Down, Left, Right
-    for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-        # Apply wrapping logic using modulo
-        nr = (r + dr) % state.size
-        nc = (c + dc) % state.size
-        
-        # Check if the move is valid: 
-        # Must be empty OR the target endpoint for this color
-        # IMPORTANT: If it's the target, it must be the target for THIS color.
-        # Other colors' endpoints are obstacles.
-        cell_value = state.grid[nr][nc]
-        is_empty = (cell_value == 0)
-        is_own_target = ((nr, nc) == target)
-        
-        if is_empty or is_own_target:
-            # Create a deep copy of the grid for the new state
-            new_grid = [row[:] for row in state.grid]
-            new_grid[nr][nc] = active_color
-            
-            new_positions = state.current_positions.copy()
-            new_positions[active_color] = (nr, nc)
-            
-            successors.append(PipeState(new_grid, new_positions, state.goals, state.size))
-            
-    return successors
-
+# ============================================================================
 
 from collections import deque
 import heapq
+from enum import Enum
+from typing import List, Tuple, Dict, Set
 
 
-# HÀM HEURISTIC (HEURISTIC FUNCTIONS)
+# ============================================================================
+# TILE TYPES - CÁC LOẠI ỐNG
+# ============================================================================
 
-
-def manhattan_distance_wrap(pos1, pos2, grid_size):
+class TileType(Enum):
     """
-    Tính Manhattan distance giữa 2 vị trí với wrap-around (toroidal topology).
-    
-    Trong lưới wrap-around, khoảng cách có thể ngắn hơn nếu đi qua cạnh.
-    Ví dụ: trên lưới 7x7, từ (0,0) đến (0,6) có thể:
-      - Đi thẳng: 6 bước
-      - Wrap qua trái: 1 bước (0,0) -> (0,-1) = (0,6)
-    
-    Args:
-        pos1: tuple (row, col) vị trí 1
-        pos2: tuple (row, col) vị trí 2
-        grid_size: kích thước lưới (7 cho 7x7)
-    
-    Returns:
-        int: Manhattan distance ngắn nhất (có xét wrap)
-    
-    Công thức:
-        - Với mỗi chiều (row/col), khoảng cách = min(normal_dist, wrap_dist)
-        - normal_dist = |pos1 - pos2|
-        - wrap_dist = grid_size - normal_dist
-    
-    Ví dụ:
-        Grid 7x7, từ (0,0) đến (0,6):
-        - Col: min(|0-6|=6, 7-6=1) = 1 ← chọn wrap!
-        - Row: min(|0-0|=0, 7-0=7) = 0
-        - Tổng: 1
+    Các loại tile ống:
+    - EMPTY: Ô trống (không có ống)
+    - STRAIGHT: Ống thẳng (2 đầu nối: 0-2 hoặc 1-3)
+    - CORNER: Ống góc (2 đầu nối: 0-1, 1-2, 2-3, 3-0)
+    - T_JUNCTION: Ống chữ T (3 đầu nối)
+    - CROSS: Ống chữ + (4 đầu nối)
     """
-    r1, c1 = pos1
-    r2, c2 = pos2
-    
-    # Khoảng cách theo hàng (row)
-    row_dist = abs(r1 - r2)
-    row_wrap_dist = grid_size - row_dist
-    min_row_dist = min(row_dist, row_wrap_dist)
-    
-    # Khoảng cách theo cột (column)
-    col_dist = abs(c1 - c2)
-    col_wrap_dist = grid_size - col_dist
-    min_col_dist = min(col_dist, col_wrap_dist)
-    
-    return min_row_dist + min_col_dist
+    EMPTY = 0       # ' '
+    STRAIGHT = 1    # │ hoặc ─
+    CORNER = 2      # └ ┘ ┐ ┌
+    T_JUNCTION = 3  # ├ ┤ ┬ ┴
+    CROSS = 4       # ┼
 
-def heuristic(state):
-    """
-    Hàm heuristic h(n) cho A* search.
+
+# ============================================================================
+# TILE CLASS - MỖI Ô LƯỚI
+# ============================================================================
+
+class Tile:
+
+    # Định nghĩa connections cho mỗi loại tile ở rotation 0
+    BASE_CONNECTIONS = {
+        TileType.EMPTY: [],
+        TileType.STRAIGHT: [0, 2],      # Up-Down (│)
+        TileType.CORNER: [2, 3],        # Down-Left (└)
+        TileType.T_JUNCTION: [0, 1, 2], # Up-Right-Down (├)
+        TileType.CROSS: [0, 1, 2, 3]    # All directions (┼)
+    }
     
-    Ước lượng số bước còn lại từ state hiện tại đến goal state.
+    def __init__(self, tile_type: TileType, rotation: int = 0):
+        """
+        Args:
+            tile_type: Loại tile (STRAIGHT, CORNER, etc.)
+            rotation: Độ xoay (0, 1, 2, 3)
+        """
+        self.type = tile_type
+        self.rotation = rotation % 4  # Đảm bảo 0-3
     
-    THÀNH PHẦN CÁC HEURISTIC:
+    def get_connections(self) -> List[int]:
+
+        base = self.BASE_CONNECTIONS[self.type]
+        # Xoay mỗi connection theo rotation
+        return [(conn + self.rotation) % 4 for conn in base]
     
-    1. **H1: Tổng Manhattan distance của các màu chưa hoàn thành**
-       - Với mỗi màu chưa đến đích, tính khoảng cách từ vị trí hiện tại đến goal
-       - Sử dụng Manhattan distance có wrap-around
-       - Lý do: Mỗi màu cần ít nhất Manhattan distance bước để đến đích
+    def rotate(self, times: int = 1) -> 'Tile':
+        return Tile(self.type, self.rotation + times)
     
-    2. **H2: Số ô trống còn lại**
-       - Đếm số ô có giá trị 0 trong grid
-       - Mỗi ô trống cần ít nhất 1 bước để lấp đầy
-       - Lý do: Goal state yêu cầu lấp đầy toàn bộ lưới
+    def __eq__(self, other):
+        if not isinstance(other, Tile):
+            return False
+        return self.type == other.type and self.rotation == other.rotation
     
-    3. **Kết hợp H1 và H2**
-       - h(n) = max(H1, H2)
-       - Lý do: Cả hai điều kiện đều phải thỏa mãn
-       - Chọn max để có heuristic mạnh hơn nhưng vẫn admissible
+    def __hash__(self):
+        return hash((self.type, self.rotation))
     
-    TÍNH CHẤT:
-    - **Admissible**: h(n) <= cost thực tế
-      + H1 admissible vì Manhattan distance <= đường đi thực tế
-      + H2 admissible vì phải đi qua tất cả ô trống
-      + max(H1, H2) vẫn admissible
+    def __repr__(self):
+        return f"Tile({self.type.name}, rot={self.rotation})"
     
-    - **Consistent**: h(n) <= c(n, n') + h(n')
-      + Mỗi bước đi giảm Manhattan distance tối đa 1
-      + Mỗi bước đi lấp đầy tối đa 1 ô
-      + Do đó heuristic consistent
-    
-    Args:
-        state: PipeState object
-    
-    Returns:
-        int: Giá trị heuristic (ước lượng số bước còn lại)
-    
-    Ví dụ:
-        State: A ở (0,0), goal ở (0,4), lưới 5x5, 20 ô trống
-        - H1 = manhattan_distance_wrap((0,0), (0,4), 5) = 1 (wrap!)
-        - H2 = 20 ô trống
-        - h(n) = max(1, 20) = 20
-    """
-    h1 = 0  # Tổng Manhattan distance
-    h2 = 0  # Số ô trống
-    
-    # H1: Tính tổng Manhattan distance của các màu chưa hoàn thành
-    for color, current_pos in state.current_positions.items():
-        goal_pos = state.goals[color]
+    def to_char(self) -> str:
+        """
+        Chuyển tile thành ký tự hiển thị.
         
-        # Nếu màu này chưa đến đích
-        if current_pos != goal_pos:
-            distance = manhattan_distance_wrap(current_pos, goal_pos, state.size)
-            h1 += distance
-    
-    # H2: Đếm số ô trống (giá trị 0)
-    for row in state.grid:
-        h2 += row.count(0)
-    
-    # Trả về max của hai heuristic
-    # Lý do dùng max:
-    # - Cả hai điều kiện đều cần thỏa mãn để đạt goal
-    # - max() cho heuristic mạnh hơn (ít node expand hơn)
-    # - max() vẫn admissible nếu cả hai thành phần đều admissible
-    return max(h1, h2)
+        Returns:
+            Ký tự đại diện cho tile
+        """
+        if self.type == TileType.EMPTY:
+            return ' '
+        
+        # Ký tự Unicode cho các loại ống
+        chars = {
+            TileType.STRAIGHT: ['│', '─', '│', '─'],
+            TileType.CORNER: ['└', '┘', '┐', '┌'],
+            TileType.T_JUNCTION: ['├', '┬', '┤', '┴'],
+            TileType.CROSS: ['┼', '┼', '┼', '┼']
+        }
+        
+        return chars[self.type][self.rotation]
 
-def heuristic_simple(state):
+
+# ============================================================================
+# PIPE STATE CLASS
+# ============================================================================
+
+class PipeState:
     """
-    Heuristic đơn giản hơn - chỉ dùng Manhattan distance.
-    Dùng để so sánh performance với heuristic phức tạp hơn.
-    Args:
-        state: PipeState object
-    Returns:
-        int: Tổng Manhattan distance của các màu chưa hoàn thành
+    Trạng thái bài toán: Lưới các tile ống.
     """
-    total_distance = 0
     
-    for color, current_pos in state.current_positions.items():
-        goal_pos = state.goals[color]
-        if current_pos != goal_pos:
-            distance = manhattan_distance_wrap(current_pos, goal_pos, state.size)
-            total_distance += distance
+    def __init__(self, grid: List[List[Tile]], size: int = 7):
+        """
+        Args:
+            grid: 2D list của Tile objects
+            size: Kích thước lưới (7 cho 7x7)
+        """
+        self.grid = [row[:] for row in grid]  # Deep copy
+        self.size = size
     
-    return total_distance
+    def __eq__(self, other):
+        if not isinstance(other, PipeState):
+            return False
+        return self.grid == other.grid
+    
+    def __hash__(self):
+        return hash(tuple(tuple(row) for row in self.grid))
+    
+    def __lt__(self, other):
+        # Cho priority queue
+        return str(self.grid) < str(other.grid)
+    
+    @staticmethod
+    def from_string(grid_str: str) -> 'PipeState':
+        """
+        Parse string thành PipeState.
+        
+        Format:
+            | = STRAIGHT vertical (rotation 0)
+            - = STRAIGHT horizontal (rotation 1)
+            L = CORNER (└, rotation 0)
+            J = CORNER (┘, rotation 1)
+            7 = CORNER (┐, rotation 2)
+            r = CORNER (┌, rotation 3)
+            T = T_JUNCTION (├, rotation 0)
+            F = T_JUNCTION (┬, rotation 1)
+            H = T_JUNCTION (┤, rotation 2)
+            E = T_JUNCTION (┴, rotation 3)
+            + = CROSS
+            . = EMPTY
+        
+        Example:
+            '''
+            |-L.
+            |.J-
+            +TT+
+            '''
+        """
+        lines = [line.strip() for line in grid_str.strip().splitlines() if line.strip()]
+        
+        char_map = {
+            '.': (TileType.EMPTY, 0),
+            ' ': (TileType.EMPTY, 0),
+            '|': (TileType.STRAIGHT, 0),
+            '-': (TileType.STRAIGHT, 1),
+            'L': (TileType.CORNER, 0),
+            'J': (TileType.CORNER, 1),
+            '7': (TileType.CORNER, 2),
+            'r': (TileType.CORNER, 3),
+            'T': (TileType.T_JUNCTION, 0),
+            'F': (TileType.T_JUNCTION, 1),
+            'H': (TileType.T_JUNCTION, 2),
+            'E': (TileType.T_JUNCTION, 3),
+            '+': (TileType.CROSS, 0),
+        }
+        
+        grid = []
+        for line in lines:
+            row = []
+            for char in line:
+                if char in char_map:
+                    tile_type, rotation = char_map[char]
+                    row.append(Tile(tile_type, rotation))
+                else:
+                    # Default: empty
+                    row.append(Tile(TileType.EMPTY, 0))
+            grid.append(row)
+        
+        size = len(grid)
+        return PipeState(grid, size)
+    
+    def get_tile(self, r: int, c: int) -> Tile:
+        """Lấy tile tại vị trí (r, c)"""
+        return self.grid[r][c]
+    
+    def set_tile(self, r: int, c: int, tile: Tile) -> 'PipeState':
+        """
+        Tạo state mới với tile tại (r, c) được thay đổi.
+        
+        Returns:
+            PipeState mới
+        """
+        new_grid = [row[:] for row in self.grid]
+        new_grid[r][c] = tile
+        return PipeState(new_grid, self.size)
 
-def heuristic_empty_cells(state):
-    """
-    Heuristic chỉ đếm số ô trống.
-    
-    Đơn giản nhưng đôi khi hiệu quả.
-    
-    Args:
-        state: PipeState object
-    
-    Returns:
-        int: Số ô trống trong grid
-    """
-    empty_count = 0
-    for row in state.grid:
-        empty_count += row.count(0)
-    return empty_count
 
-# THUẬT TOÁN TÌM KIẾM MÙ (BLIND SEARCH ALGORITHMS)
+# ============================================================================
+# GAME LOGIC
+# ============================================================================
+
+def get_neighbor_pos(r: int, c: int, direction: int, size: int) -> Tuple[int, int]:
+    deltas = [(-1, 0), (0, 1), (1, 0), (0, -1)]  # Up, Right, Down, Left
+    dr, dc = deltas[direction]
+    return ((r + dr) % size, (c + dc) % size)
 
 
-def bfs(initial_state):
+def is_connected(state: PipeState, r: int, c: int, direction: int) -> bool:
+    
+    tile = state.get_tile(r, c)
+    connections = tile.get_connections()
+    
+    # Tile hiện tại phải có connection theo direction
+    if direction not in connections:
+        return False
+    
+    # Lấy vị trí láng giềng (có wrap)
+    nr, nc = get_neighbor_pos(r, c, direction, state.size)
+    neighbor_tile = state.get_tile(nr, nc)
+    neighbor_connections = neighbor_tile.get_connections()
+    
+    # Láng giềng phải có connection ngược lại
+    opposite_direction = (direction + 2) % 4
+    return opposite_direction in neighbor_connections
+
+
+def count_open_ends(state: PipeState) -> int:
+    open_count = 0
+    
+    for r in range(state.size):
+        for c in range(state.size):
+            tile = state.get_tile(r, c)
+            connections = tile.get_connections()
+            
+            # Đếm số connection không nối với láng giềng
+            for direction in connections:
+                if not is_connected(state, r, c, direction):
+                    open_count += 1
+    
+    return open_count
+
+
+def is_goal(state: PipeState) -> bool:
+    return count_open_ends(state) == 0
+
+
+def get_tiles_with_open_ends(state: PipeState) -> Set[Tuple[int, int]]:
+    tiles_to_rotate = set()
+    
+    for r in range(state.size):
+        for c in range(state.size):
+            tile = state.get_tile(r, c)
+            
+            if tile.type == TileType.EMPTY or tile.type == TileType.CROSS:
+                continue
+            
+            connections = tile.get_connections()
+            has_open_end = False
+            
+            # Check nếu tile có open end
+            for direction in connections:
+                if not is_connected(state, r, c, direction):
+                    has_open_end = True
+                    break
+            
+            if has_open_end:
+                tiles_to_rotate.add((r, c))
+                
+                # Thêm láng giềng
+                for direction in range(4):
+                    nr, nc = get_neighbor_pos(r, c, direction, state.size)
+                    neighbor_tile = state.get_tile(nr, nc)
+                    if neighbor_tile.type != TileType.EMPTY:
+                        tiles_to_rotate.add((nr, nc))
+    
+    return tiles_to_rotate
+
+
+def get_successors(state: PipeState, optimized: bool = True) -> List[PipeState]:
+    successors = []
+    
+    if optimized:
+        # Chỉ xoay tiles liên quan
+        tiles_to_rotate = get_tiles_with_open_ends(state)
+        
+        if not tiles_to_rotate:
+            return []
+        
+        for r, c in tiles_to_rotate:
+            tile = state.get_tile(r, c)
+            
+            if tile.type == TileType.CROSS:
+                continue
+            
+            rotated_tile = tile.rotate(1)
+            new_state = state.set_tile(r, c, rotated_tile)
+            successors.append(new_state)
+    else:
+        # Xoay tất cả tiles (cách cũ)
+        for r in range(state.size):
+            for c in range(state.size):
+                tile = state.get_tile(r, c)
+                
+                if tile.type == TileType.EMPTY or tile.type == TileType.CROSS:
+                    continue
+                
+                rotated_tile = tile.rotate(1)
+                new_state = state.set_tile(r, c, rotated_tile)
+                successors.append(new_state)
+    
+    return successors
+
+
+# ============================================================================
+# HEURISTIC FUNCTIONS
+# ============================================================================
+
+def heuristic(state: PipeState) -> int:
+    open_ends = count_open_ends(state)
+    # Chia 2 vì mỗi kết nối giảm 2 đầu hở
+    return open_ends // 2
+
+
+def heuristic_simple(state: PipeState) -> int:
+    return count_open_ends(state)
+
+
+# ============================================================================
+# SEARCH ALGORITHMS
+# ============================================================================
+
+def bfs(initial_state: PipeState):
+    """BFS - Breadth-First Search"""
     if is_goal(initial_state):
         return initial_state, [initial_state], {'nodes_explored': 0, 'max_frontier_size': 1}
     
-    # Queue cho BFS (FIFO)
     frontier = deque([(initial_state, [initial_state])])
     visited = {initial_state}
     
-    # Thống kê
     nodes_explored = 0
     max_frontier_size = 1
     
@@ -293,13 +350,11 @@ def bfs(initial_state):
         current_state, path = frontier.popleft()
         nodes_explored += 1
         
-        # Sinh các trạng thái kế tiếp
         for successor in get_successors(current_state):
             if successor not in visited:
                 visited.add(successor)
                 new_path = path + [successor]
                 
-                # Kiểm tra đích
                 if is_goal(successor):
                     stats = {
                         'nodes_explored': nodes_explored,
@@ -311,7 +366,6 @@ def bfs(initial_state):
                 
                 frontier.append((successor, new_path))
     
-    # Không tìm thấy solution
     stats = {
         'nodes_explored': nodes_explored,
         'max_frontier_size': max_frontier_size,
@@ -319,16 +373,15 @@ def bfs(initial_state):
     }
     return None, None, stats
 
-def dfs(initial_state, max_depth=1000):
-   
+
+def dfs(initial_state: PipeState, max_depth: int = 1000):
+    """DFS - Depth-First Search"""
     if is_goal(initial_state):
         return initial_state, [initial_state], {'nodes_explored': 0, 'max_depth': 0}
     
-    # Stack cho DFS (LIFO)
-    frontier = [(initial_state, [initial_state], 0)]  # (state, path, depth)
+    frontier = [(initial_state, [initial_state], 0)]
     visited = {initial_state}
     
-    # Thống kê
     nodes_explored = 0
     max_frontier_size = 1
     max_depth_reached = 0
@@ -339,17 +392,14 @@ def dfs(initial_state, max_depth=1000):
         nodes_explored += 1
         max_depth_reached = max(max_depth_reached, depth)
         
-        # Kiểm tra độ sâu
         if depth >= max_depth:
             continue
         
-        # Sinh các trạng thái kế tiếp
         for successor in get_successors(current_state):
             if successor not in visited:
                 visited.add(successor)
                 new_path = path + [successor]
                 
-                # Kiểm tra đích
                 if is_goal(successor):
                     stats = {
                         'nodes_explored': nodes_explored,
@@ -362,7 +412,6 @@ def dfs(initial_state, max_depth=1000):
                 
                 frontier.append((successor, new_path, depth + 1))
     
-    # Không tìm thấy solution
     stats = {
         'nodes_explored': nodes_explored,
         'max_frontier_size': max_frontier_size,
@@ -371,65 +420,45 @@ def dfs(initial_state, max_depth=1000):
     }
     return None, None, stats
 
-# ============================================================================
-# INFORMED SEARCH ALGORITHMS
-# ============================================================================
 
-def astar(initial_state):
-    """
-    A* Search - Thuật toán tìm kiếm tối ưu với heuristic.
-    
-    A* kết hợp cost thực tế g(n) và heuristic h(n):
-        f(n) = g(n) + h(n)
-    
-    Trong đó:
-        - g(n): Chi phí thực tế từ start đến node n
-        - h(n): Ước lượng chi phí từ n đến goal (heuristic)
-        - f(n): Ước lượng tổng chi phí từ start qua n đến goal
-    
-    NGUYÊN LÝ:
-        - Mở rộng node có f(n) nhỏ nhất
-        - Sử dụng Priority Queue (min-heap) để lưu frontier
-        - Đảm bảo tìm được đường đi tối ưu nếu h(n) admissible
-    """
+def astar(initial_state: PipeState, show_progress: bool = False):
     if is_goal(initial_state):
         return initial_state, [initial_state], {'nodes_explored': 0, 'max_frontier_size': 1}
     
-    # Priority queue: (f_score, counter, g_score, state, path)
-    # counter để break ties khi f_score bằng nhau
     counter = 0
-    g_score = 0  # Cost từ start đến initial_state
+    g_score = 0
     h_score = heuristic(initial_state)
     f_score = g_score + h_score
     
     frontier = [(f_score, counter, g_score, initial_state, [initial_state])]
     visited = {initial_state}
     
-    # Thống kê
     nodes_explored = 0
     max_frontier_size = 1
     
     while frontier:
         max_frontier_size = max(max_frontier_size, len(frontier))
         
-        # Lấy node có f_score nhỏ nhất
         current_f, _, current_g, current_state, path = heapq.heappop(frontier)
         nodes_explored += 1
         
-        # Sinh các trạng thái kế tiếp
+        # Progress indicator
+        if show_progress and nodes_explored % 1000 == 0:
+            print(f"\rNodes: {nodes_explored:,}, Frontier: {len(frontier):,}, h={current_f - current_g}", end="", flush=True)
+        
         for successor in get_successors(current_state):
             if successor not in visited:
                 visited.add(successor)
                 counter += 1
                 
-                # Tính các score cho successor
-                new_g = current_g + 1  # Cost mỗi bước = 1
+                new_g = current_g + 1
                 new_h = heuristic(successor)
                 new_f = new_g + new_h
                 new_path = path + [successor]
                 
-                # Kiểm tra đích
                 if is_goal(successor):
+                    if show_progress:
+                        print()  # Newline
                     stats = {
                         'nodes_explored': nodes_explored,
                         'max_frontier_size': max_frontier_size,
@@ -439,10 +468,10 @@ def astar(initial_state):
                     }
                     return successor, new_path, stats
                 
-                # Thêm vào frontier
                 heapq.heappush(frontier, (new_f, counter, new_g, successor, new_path))
     
-    # Không tìm thấy solution
+    if show_progress:
+        print()  # Newline
     stats = {
         'nodes_explored': nodes_explored,
         'max_frontier_size': max_frontier_size,
@@ -450,20 +479,8 @@ def astar(initial_state):
     }
     return None, None, stats
 
-def hill_climbing(initial_state, max_iterations=10000):
-    """
-    Hill Climbing - Thuật toán tìm kiếm local search.
-    
-    NGUYÊN LÝ:
-        - Bắt đầu từ state hiện tại
-        - Chọn successor có h(n) NHỎ NHẤT (gần goal nhất)
-        - Di chuyển đến successor đó
-        - Lặp lại cho đến khi đạt goal hoặc stuck
-    
-    LƯU Ý:
-        - h(n) NHỎ → GẦN GOAL hơn
-        - Chọn successor có h(n) nhỏ nhất = greedy best-first
-    """
+
+def hill_climbing(initial_state: PipeState, max_iterations: int = 10000):
     if is_goal(initial_state):
         return initial_state, [initial_state], {'nodes_explored': 0, 'iterations': 0}
     
@@ -471,20 +488,15 @@ def hill_climbing(initial_state, max_iterations=10000):
     path = [initial_state]
     visited = {initial_state}
     
-    # Thống kê
     nodes_explored = 0
     iterations = 0
     max_successors_size = 0
     
     for iterations in range(max_iterations):
-        # Sinh các successors
         successors = get_successors(current_state)
-        
-        # Lọc bỏ các state đã thăm (để tránh vòng lặp)
         unvisited_successors = [s for s in successors if s not in visited]
         
         if not unvisited_successors:
-            # Stuck - không còn successor chưa thăm
             stats = {
                 'nodes_explored': nodes_explored,
                 'iterations': iterations,
@@ -496,14 +508,12 @@ def hill_climbing(initial_state, max_iterations=10000):
         
         max_successors_size = max(max_successors_size, len(unvisited_successors))
         
-        # Tính h(n) cho tất cả successors
         successors_with_h = []
         for successor in unvisited_successors:
             h_value = heuristic(successor)
             successors_with_h.append((h_value, successor))
             nodes_explored += 1
             
-            # Kiểm tra nếu successor là goal
             if is_goal(successor):
                 new_path = path + [successor]
                 stats = {
@@ -515,16 +525,11 @@ def hill_climbing(initial_state, max_iterations=10000):
                 }
                 return successor, new_path, stats
         
-        # Sắp xếp theo h(n) tăng dần (nhỏ nhất = tốt nhất)
         successors_with_h.sort(key=lambda x: x[0])
-        
-        # Chọn successor tốt nhất (h(n) nhỏ nhất)
         best_h, best_successor = successors_with_h[0]
         current_h = heuristic(current_state)
         
-        # Kiểm tra có cải thiện không
         if best_h >= current_h:
-            # Stuck at local minimum - successor tốt nhất vẫn tệ hơn hoặc bằng hiện tại
             stats = {
                 'nodes_explored': nodes_explored,
                 'iterations': iterations + 1,
@@ -534,12 +539,10 @@ def hill_climbing(initial_state, max_iterations=10000):
             }
             return None, path, stats
         
-        # Di chuyển đến successor tốt nhất
         current_state = best_successor
         path.append(best_successor)
         visited.add(best_successor)
     
-    # Đã đạt max_iterations
     stats = {
         'nodes_explored': nodes_explored,
         'iterations': max_iterations,

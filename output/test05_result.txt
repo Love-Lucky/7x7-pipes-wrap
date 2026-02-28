@@ -1,5 +1,5 @@
 ================================================================================
-TEST CASE: test05_easy_nested.txt (NEW VERSION)
+TEST CASE: test05_easy_nested.txt
 ================================================================================
 
 INITIAL STATE:
@@ -24,7 +24,7 @@ RUNNING A* SEARCH...
 RESULT
 ================================================================================
 
-Status: SOLVED ✅
+Status: SOLVED
 
 Performance Metrics:
   - Time: 1.546 seconds

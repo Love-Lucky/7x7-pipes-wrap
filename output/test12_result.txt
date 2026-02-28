@@ -1,20 +1,20 @@
 ================================================================================
-TEST CASE: test08_medium_connected.txt
+TEST CASE: test12_hard_six.txt
 ================================================================================
 
 INITIAL STATE:
 ---------
 |└─┐    |
 |│ │    |
-|│ ┌─┐  |
-|│   │  |
-|┌───┘  |
+|┌─┘    |
 |       |
-|       |
+|└─┐    |
+|│ │    |
+|┌─┘    |
 ---------
 
-Open ends: 14
-Difficulty: MEDIUM
+Open ends: 16
+Difficulty: HARD
 
 --------------------------------------------------------------------------------
 RUNNING A* SEARCH...
@@ -27,23 +27,22 @@ RESULT
 Status: SOLVED
 
 Performance Metrics:
-  - Time: 93.994 seconds
-  - RAM Peak: 173.46 MB
-  - Nodes explored: 18,677
-  - Path length: 14 steps
-  - Avg nodes/sec: 199
+  - Time: 1349.087 seconds
+  - RAM Peak: 2139.91 MB
+  - Nodes explored: 281,445
+  - Path length: 17 steps
+  - Avg nodes/sec: 209
 
 FINAL STATE (SOLVED):
 ---------
 |┌─└    |
 |│ │    |
-|│ ┐─└  |
-|│   │  |
-|┐───┘  |
+|┐─┘    |
 |       |
-|       |
+|┌─└    |
+|│ │    |
+|┐─┘    |
 ---------
 
 Final open ends: 0
-
 ================================================================================

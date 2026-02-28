@@ -24,7 +24,7 @@ RUNNING A* SEARCH...
 RESULT
 ================================================================================
 
-Status: SOLVED ✅
+Status: SOLVED
 
 Performance Metrics:
   - Time: 160.520 seconds

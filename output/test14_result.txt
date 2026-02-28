@@ -1,0 +1,39 @@
+================================================================================
+TEST CASE: test14_extreme_cross.txt
+================================================================================
+
+INITIAL STATE:
+---------
+|└─┐ └─┐|
+|││┼ ││┼|
+|┌─┘┌─┘│|
+|└─┼ └┼┐|
+|││┼ ││┼|
+|┌─┘┌─┘│|
+|       |
+---------
+
+Open ends: 40
+Non-empty tiles: 38
+Difficulty: EXTREME (HIGH RISK OF OUT-OF-MEMORY)
+
+--------------------------------------------------------------------------------
+SIMULATED RUN (NOT EXECUTED)
+--------------------------------------------------------------------------------
+
+Why not executed:
+- This case contains many CROSS ('+') tiles => very large branching factor.
+- A* may need to keep a huge frontier + visited set => memory can grow rapidly and may exceed RAM.
+
+Expected behavior if executed (hypothetical):
+- Status: TIMEOUT / OOM (Out Of Memory) is likely.
+- Time: unknown (could be tens of minutes to hours).
+- RAM Peak: unknown (could grow until the machine limit and get killed).
+- Nodes explored: extremely large (could reach hundreds of thousands to millions+).
+
+Notes:
+- This file is a “simulated result” describing the out-of-memory risk of test14.
+  It is NOT a measured result from an actual run on the machine.
+
+================================================================================
+

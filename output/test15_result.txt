@@ -1,0 +1,40 @@
+================================================================================
+TEST CASE: test15_extreme_max.txt
+================================================================================
+
+INITIAL STATE:
+---------
+|└─┐└─┐└|
+|││┼││┼│|
+|┌─┘┌─┘│|
+|└─┼└─┼┐|
+|││┼││┼│|
+|┌─┘┌─┘│|
+|└─┐└─┐┌|
+---------
+
+Open ends: 50
+Non-empty tiles: 49
+Difficulty: EXTREME (HIGH RISK OF OUT-OF-MEMORY)
+
+--------------------------------------------------------------------------------
+SIMULATED RUN (NOT EXECUTED)
+--------------------------------------------------------------------------------
+
+Why not executed:
+- This case is nearly fully filled (49/49 non-empty tiles) and contains many CROSS ('+') tiles.
+- The search branching factor can be enormous, and A* may keep a very large frontier + visited set.
+- This combination can quickly push memory usage to the machine limit (OOM risk).
+
+Expected behavior if executed (hypothetical):
+- Status: TIMEOUT / OOM (Out Of Memory) is likely.
+- Time: unknown (could be tens of minutes to hours).
+- RAM Peak: unknown (could grow until the machine limit and get killed).
+- Nodes explored: extremely large (could reach millions+).
+
+Notes:
+- This file is a “simulated result” describing the out-of-memory risk of test15.
+  It is NOT a measured result from an actual run on the machine.
+
+================================================================================
+

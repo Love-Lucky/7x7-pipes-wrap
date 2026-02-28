@@ -38,3 +38,16 @@ Notes:
 
 ================================================================================
 
+NOTE ON BFS AND DFS FOR 7x7 PIPES WRAP (ENGLISH)
+================================================================================
+
+In this puzzle (7x7 wrap-around pipes), both BFS and DFS are theoretically correct search strategies, but in practice they are unsafe for full 7x7 boards:
+
+1. The state space is enormous: 7x7 = 49 tiles, most with up to 4 rotations, so the number of possible configurations is astronomically large.
+2. The branching factor is high: from each state many tiles can be rotated in several ways, so blind search quickly generates a huge number of states.
+3. Wrap-around connections make pruning harder, because more pipe connections are potentially valid across the borders.
+4. BFS must store entire frontier layers in memory to guarantee the shortest solution, which causes the frontier to grow to hundreds of thousands or millions of states and can consume hundreds of MB of RAM even on "easy" tests.
+5. DFS uses less memory in the recursion stack, but to avoid revisiting states it still needs a large visited set; without a strong heuristic it can also go very deep into useless branches, wasting time and memory.
+6. In this project we therefore use A* with a domain-specific heuristic (counting open pipe ends) as the main algorithm; it explores far fewer states and keeps time and RAM usage under control, while BFS/DFS often lead to state-space explosion and potential RAM overflow on 7x7 instances.
+
+This note applies to all test cases in this assignment (from test02 to test15).

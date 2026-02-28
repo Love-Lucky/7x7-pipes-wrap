@@ -1,5 +1,10 @@
 from main import PipeState, bfs, dfs, astar, hill_climbing, is_goal, count_open_ends, Tile, TileType
 import time
+import sys
+import threading
+
+# Output file for COMPARISON_RESULTS.md
+OUTPUT_FILE = "COMPARISON_RESULTS.md"
 
 def print_state(state, title=""):
     """In trạng thái lưới"""
@@ -75,7 +80,24 @@ def generate_random_puzzle(size: int, density: float = 0.7):
     
     return PipeState(grid, size)
 
-def test_puzzle(puzzle_name, initial_state, timeout=60):
+def run_with_timeout(func, timeout_sec, default_result):
+    """Chạy func() trong thread, trả về (result, timed_out). Nếu timeout trả default_result."""
+    result_holder = {}
+    def run():
+        try:
+            result_holder['value'] = func()
+        except Exception as e:
+            result_holder['error'] = e
+    t = threading.Thread(target=run, daemon=True)
+    t.start()
+    t.join(timeout=timeout_sec)
+    if t.is_alive():
+        return default_result, True
+    if 'error' in result_holder:
+        raise result_holder['error']
+    return result_holder.get('value'), False
+
+def test_puzzle(puzzle_name, initial_state, timeout=60, bfs_dfs_timeout=12):
     """Test một puzzle với tất cả các thuật toán"""
     print("\n" + "="*50)
     print(f"TEST: {puzzle_name}")
@@ -159,53 +181,66 @@ def test_puzzle(puzzle_name, initial_state, timeout=60):
     print("-"*50)
     start_time = time.time()
     try:
-        solution, path, stats = bfs(initial_state)
-        bfs_time = time.time() - start_time
-        
-        if bfs_time > timeout:
-            print(f"[TIMEOUT] BFS QUÁ LÂU (>{timeout}s), bỏ qua...")
-            results['BFS'] = {'found': False, 'nodes': stats['nodes_explored'], 'path_length': None, 'time': bfs_time}
-        elif solution:
-            print(f"[OK] BFS TÌM THẤY GIẢI PHÁP!")
-            print(f"   Nodes explored: {stats['nodes_explored']:,}")
-            print(f"   Path length: {stats['path_length']}")
-            print(f"   Thời gian: {bfs_time:.4f}s")
-            results['BFS'] = {
-                'found': True,
-                'nodes': stats['nodes_explored'],
-                'path_length': stats['path_length'],
-                'time': bfs_time
-            }
+        bfs_result, timed_out = run_with_timeout(
+            lambda: bfs(initial_state),
+            timeout_sec=bfs_dfs_timeout,
+            default_result=(None, None, {'nodes_explored': 0, 'path_length': None})
+        )
+        if timed_out:
+            print(f"[TIMEOUT] BFS quá {bfs_dfs_timeout}s, bỏ qua...")
+            results['BFS'] = {'found': False, 'nodes': 0, 'path_length': None, 'time': float(bfs_dfs_timeout)}
         else:
-            print(f"[FAIL] BFS KHÔNG TÌM THẤY!")
-            results['BFS'] = {'found': False, 'nodes': stats['nodes_explored'], 'path_length': None, 'time': bfs_time}
+            solution, path, stats = bfs_result
+            bfs_time = time.time() - start_time
+            if solution:
+                print(f"[OK] BFS TÌM THẤY GIẢI PHÁP!")
+                print(f"   Nodes explored: {stats['nodes_explored']:,}")
+                print(f"   Path length: {stats['path_length']}")
+                print(f"   Thời gian: {bfs_time:.4f}s")
+                results['BFS'] = {
+                    'found': True,
+                    'nodes': stats['nodes_explored'],
+                    'path_length': stats['path_length'],
+                    'time': bfs_time
+                }
+            else:
+                print(f"[FAIL] BFS KHÔNG TÌM THẤY!")
+                results['BFS'] = {'found': False, 'nodes': stats.get('nodes_explored', 0), 'path_length': None, 'time': bfs_time}
     except Exception as e:
         print(f"[ERROR] BFS LỖI: {e}")
         results['BFS'] = {'found': False, 'nodes': 0, 'path_length': None, 'time': 0}
     
-    # Test DFS
+    # Test DFS (với timeout)
     print("\n" + "-"*50)
     print("CHẠY DFS...")
     print("-"*50)
     start_time = time.time()
     try:
-        solution, path, stats = dfs(initial_state, max_depth=100)
-        dfs_time = time.time() - start_time
-        
-        if solution:
-            print(f"[OK] DFS TÌM THẤY GIẢI PHÁP!")
-            print(f"   Nodes explored: {stats['nodes_explored']:,}")
-            print(f"   Path length: {stats['path_length']}")
-            print(f"   Thời gian: {dfs_time:.4f}s")
-            results['DFS'] = {
-                'found': True,
-                'nodes': stats['nodes_explored'],
-                'path_length': stats['path_length'],
-                'time': dfs_time
-            }
+        dfs_result, timed_out = run_with_timeout(
+            lambda: dfs(initial_state, max_depth=100),
+            timeout_sec=bfs_dfs_timeout,
+            default_result=(None, None, {'nodes_explored': 0, 'path_length': None})
+        )
+        if timed_out:
+            print(f"[TIMEOUT] DFS quá {bfs_dfs_timeout}s, bỏ qua...")
+            results['DFS'] = {'found': False, 'nodes': 0, 'path_length': None, 'time': float(bfs_dfs_timeout)}
         else:
-            print(f"[FAIL] DFS KHÔNG TÌM THẤY!")
-            results['DFS'] = {'found': False, 'nodes': stats.get('nodes_explored', 0), 'path_length': None, 'time': dfs_time}
+            solution, path, stats = dfs_result
+            dfs_time = time.time() - start_time
+            if solution:
+                print(f"[OK] DFS TÌM THẤY GIẢI PHÁP!")
+                print(f"   Nodes explored: {stats['nodes_explored']:,}")
+                print(f"   Path length: {stats['path_length']}")
+                print(f"   Thời gian: {dfs_time:.4f}s")
+                results['DFS'] = {
+                    'found': True,
+                    'nodes': stats['nodes_explored'],
+                    'path_length': stats['path_length'],
+                    'time': dfs_time
+                }
+            else:
+                print(f"[FAIL] DFS KHÔNG TÌM THẤY!")
+                results['DFS'] = {'found': False, 'nodes': stats.get('nodes_explored', 0), 'path_length': None, 'time': dfs_time}
     except Exception as e:
         print(f"[ERROR] DFS LỖI: {e}")
         results['DFS'] = {'found': False, 'nodes': 0, 'path_length': None, 'time': 0}
@@ -232,8 +267,33 @@ def test_puzzle(puzzle_name, initial_state, timeout=60):
     
     return results
 
+class TeeOutput:
+    """Ghi đồng thời ra stdout và vào buffer để sau ghi file."""
+    def __init__(self):
+        self._stdout = sys.stdout
+        self._buffer = []
+    def write(self, s):
+        self._stdout.write(s)
+        self._buffer.append(s)
+    def flush(self):
+        self._stdout.flush()
+    def getvalue(self):
+        return "".join(self._buffer)
+
 def main():
     """Chạy test so sánh các thuật toán"""
+    tee = TeeOutput()
+    sys.stdout = tee
+    try:
+        _main_impl()
+    finally:
+        sys.stdout = sys.__stdout__
+    with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
+        f.write(tee.getvalue())
+    print(f"\n[Đã ghi kết quả vào {OUTPUT_FILE}]")
+
+def _main_impl():
+    """Phần chính của main (in ra tee)."""
     print("\n" + "="*50)
     print("SO SÁNH THUẬT TOÁN: A* vs Hill Climbing vs BFS vs DFS")
     print("Bài toán: 7x7 Pipes Wrap Puzzle (Rotation Version)")
@@ -257,10 +317,10 @@ def main():
     """)
     test_puzzle("TEST 2: MEDIUM 4x4", puzzle2)
     
-    # Test Case 3: Random puzzle
-    print("\nTạo puzzle ngẫu nhiên 5x5...")
-    random_puzzle = generate_random_puzzle(5, density=0.8)
-    test_puzzle("TEST 3: RANDOM 5x5", random_puzzle)
+    # Test Case 3: Random puzzle (bỏ qua để chạy nhanh; BFS/DFS có thể rất lâu)
+    # print("\nTạo puzzle ngẫu nhiên 5x5...")
+    # random_puzzle = generate_random_puzzle(5, density=0.8)
+    # test_puzzle("TEST 3: RANDOM 5x5", random_puzzle)
     
     print("\n" + "="*50)
     print("HOÀN THÀNH TẤT CẢ TEST CASES!")

@@ -1,182 +1,156 @@
-# 📊 SO SÁNH THUẬT TOÁN TÌM KIẾM
 
-## Bài toán: 7x7 Pipes Wrap Puzzle
+==================================================
+SO SÁNH THUẬT TOÁN: A* vs Hill Climbing vs BFS vs DFS
+Bài toán: 7x7 Pipes Wrap Puzzle (Rotation Version)
+==================================================
 
-Tài liệu này so sánh 4 thuật toán tìm kiếm:
-- **A*** (A-star) - Informed search với heuristic
-- **Hill Climbing** - Local search greedy
-- **BFS** (Breadth-First Search) - Blind search optimal
-- **DFS** (Depth-First Search) - Blind search nhanh
+Test với puzzle có sẵn...
 
----
+==================================================
+TEST: TEST 1: SIMPLE 3x3
+==================================================
 
-## 🎯 Kết quả Test
+TRẠNG THÁI BAN ĐẦU:
+-------
+|└|─|┐|
+|│| |│|
+|┌|─|┘|
+-------
+Open ends: 6
 
-### Test 1: Đơn giản (1 màu, 5x5)
+--------------------------------------------------
+CHẠY A* SEARCH...
+--------------------------------------------------
+[OK] A* TÌM THẤY GIẢI PHÁP!
+   Nodes explored: 664
+   Path length: 9
+   Path cost: 8
+   Thời gian: 0.1894s
 
-```
-Trạng thái ban đầu:
-A . . . A
-. . . . .
-. . . . .
-. . . . .
-. . . . .
-```
+SOLUTION:
+-------
+|┌|─|└|
+|│| |│|
+|┐|─|┘|
+-------
+Open ends: 0
 
+--------------------------------------------------
+CHẠY HILL CLIMBING...
+--------------------------------------------------
+[FAIL] HILL CLIMBING BỊ STUCK!
+   Lý do: Local minimum (current h=2, best successor h=2)
+   Nodes explored: 16
+   Iterations: 2
+   Thời gian: 0.0012s
 
+--------------------------------------------------
+CHẠY BFS...
+--------------------------------------------------
+[OK] BFS TÌM THẤY GIẢI PHÁP!
+   Nodes explored: 4,961
+   Path length: 9
+   Thời gian: 0.7902s
 
-**Phân tích:**
-- A* và BFS cùng tìm được optimal solution (path = 25)
-- A* duyệt ít node hơn BFS một chút (~0.08%)
-- Hill Climbing stuck ở local minimum sau 21 bước
-- DFS may mắn tìm được solution optimal với chỉ 25 nodes!
+--------------------------------------------------
+CHẠY DFS...
+--------------------------------------------------
+[OK] DFS TÌM THẤY GIẢI PHÁP!
+   Nodes explored: 96
+   Path length: 97
+   Thời gian: 0.0340s
 
----
+====================================================================================================
+BẢNG SO SÁNH CÁC THUẬT TOÁN
+====================================================================================================
+Thuật toán      | Tìm thấy?  | Nodes        | Path   | Thời gian (s)  | Tốc độ    
+----------------------------------------------------------------------------------------------------
+A*              | ✅ Có       | 664          | 9      | 0.1894         | 162.7x    
+Hill Climbing   | ❌ Không    | 16           | 2      | 0.0012         | 1.0x      
+BFS             | ✅ Có       | 4,961        | 9      | 0.7902         | 678.8x    
+DFS             | ✅ Có       | 96           | 97     | 0.0340         | 29.2x     
+====================================================================================================
 
-### Test 2: Vừa phải (2 màu, 5x5)
+PHÂN TÍCH:
+   • A* vs BFS: Tốc độ 4.2x, Nodes 7.5x
+   • A* optimal? Có
+   • Hill Climbing bị stuck (local minimum)
 
-```
-Trạng thái ban đầu:
-A . . . B
-. . . . .
-. . . . .
-. . . . .
-B . . . A
-```
+==================================================
+TEST: TEST 2: MEDIUM 4x4
+==================================================
 
+TRẠNG THÁI BAN ĐẦU:
+---------
+|└|─|─|┐|
+|│| | |│|
+|│| | |│|
+|┌|─|─|┘|
+---------
+Open ends: 6
 
+--------------------------------------------------
+CHẠY A* SEARCH...
+--------------------------------------------------
+[OK] A* TÌM THẤY GIẢI PHÁP!
+   Nodes explored: 1,054
+   Path length: 9
+   Path cost: 8
+   Thời gian: 0.8115s
 
-**Phân tích:**
-- A* giảm 3.4% nodes so với BFS
-- Tốc độ A* và BFS tương đương (~11s vs 10s)
-- Hill Climbing stuck sớm hơn (17 bước)
-- DFS vẫn nhanh nhất với 5,763 nodes
+SOLUTION:
+---------
+|┌|─|─|└|
+|│| | |│|
+|│| | |│|
+|┐|─|─|┘|
+---------
+Open ends: 0
 
----
+--------------------------------------------------
+CHẠY HILL CLIMBING...
+--------------------------------------------------
+[FAIL] HILL CLIMBING BỊ STUCK!
+   Lý do: Local minimum (current h=2, best successor h=2)
+   Nodes explored: 23
+   Iterations: 2
+   Thời gian: 0.0024s
 
-### Test 3: Khó hơn (3 màu, 5x5)
+--------------------------------------------------
+CHẠY BFS...
+--------------------------------------------------
+[OK] BFS TÌM THẤY GIẢI PHÁP!
+   Nodes explored: 28,851
+   Path length: 9
+   Thời gian: 7.5296s
 
-```
-Trạng thái ban đầu:
-A B . C .
-. . . . .
-. . . . .
-. . . . .
-. C . B A
-```
+--------------------------------------------------
+CHẠY DFS...
+--------------------------------------------------
+[TIMEOUT] DFS quá 12s, bỏ qua...
 
+====================================================================================================
+BẢNG SO SÁNH CÁC THUẬT TOÁN
+====================================================================================================
+Thuật toán      | Tìm thấy?  | Nodes        | Path   | Thời gian (s)  | Tốc độ    
+----------------------------------------------------------------------------------------------------
+A*              | ✅ Có       | 1,054        | 9      | 0.8115         | 332.5x    
+Hill Climbing   | ❌ Không    | 23           | 2      | 0.0024         | 1.0x      
+BFS             | ✅ Có       | 28,851       | 9      | 7.5296         | 3085.6x   
+DFS             | ❌ Không    | N/A          | N/A    | 12.0000        | 4917.6x   
+====================================================================================================
 
+PHÂN TÍCH:
+   • A* vs BFS: Tốc độ 9.3x, Nodes 27.4x
+   • A* optimal? Có
+   • Hill Climbing bị stuck (local minimum)
 
-**Phân tích:**
-- A* giảm 10.3% nodes so với BFS (tốt nhất!)
-- Puzzle khó hơn → Heuristic giúp A* hiệu quả hơn
-- Hill Climbing stuck rất sớm (7 bước)
-- DFS chỉ cần 969 nodes!
+==================================================
+HOÀN THÀNH TẤT CẢ TEST CASES!
+==================================================
 
----
-
-## 📈 Tổng hợp So sánh
-
-### 1. A* vs BFS
-
-**So sánh Nodes:**
-```
-Test 1:  A* giảm 0.08%  (1,434,673 vs 1,435,809)
-Test 2:  A* giảm 3.4%   (714,141 vs 739,523)
-Test 3:  A* giảm 10.3%  (173,448 vs 193,290)
-```
-
-**So sánh Tốc độ:**
-```
-Test 1:  A* chậm hơn 1.1x  (22.77s vs 20.74s)
-Test 2:  A* chậm hơn 1.1x  (11.30s vs 10.17s)
-Test 3:  A* chậm hơn 1.1x  (2.49s vs 2.22s)
-```
-
-**Kết luận:**
-- A* **optimal** như BFS
-- A* duyệt **ít node hơn** (1-10%)
-- A* **không nhanh hơn** BFS do overhead priority queue
-- Càng khó, A* càng hiệu quả hơn (10% giảm nodes ở test 3)
-
-### 2. Hill Climbing
-
-**Kết quả:**
-- **Stuck ở tất cả test cases**
-- **Cực kỳ nhanh**: 0.0002-0.0004s
-- **Không tìm được solution hoàn chỉnh**
-
-**Lý do stuck:**
-```
-Test 1: Stuck at h=3  (local minimum)
-Test 2: Stuck at h=5  (local minimum)
-Test 3: Stuck at h=13 (local minimum)
-```
-
-**Giải thích:**
-- Heuristic `h(n) = max(manhattan, empty_cells)` tạo **plateau**
-- Nhiều states có cùng giá trị h → Hill Climbing không biết chọn
-- Cần cải tiến: Random restart, Simulated Annealing, Tabu Search
-
-### 3. DFS
-
-**Điểm mạnh:**
-- **Nhanh nhất** trong các thuật toán tìm được solution
-- **May mắn tìm được optimal** trong tất cả test cases
-- **Tiết kiệm bộ nhớ** (O(depth))
-
-**Điểm yếu:**
-- Không đảm bảo optimal (may mắn trong test này)
-- Có thể bị stuck ở nhánh sâu vô hạn
-
----
-
-
-##Biểu đồ So sánh
-
-### Nodes Explored
-```
-Test 1:
-BFS:     1,435,809
-A*:      1,434,673
-DFS:    25
-HC:     48
-
-Test 2:
-BFS:    739,523
-A*:     714,141
-DFS:    5,763
-HC:     37
-
-Test 3:
-BFS:    193,290
-A*:     173,448
-DFS:    969
-HC:     17
-```
-
-### Thời gian (seconds)
-```
-Test 1:
-A*:     22.77s
-BFS:    20.74s
-DFS:    0.0015s
-HC:      0.0004s
-
-Test 2:
-A*:     11.30s
-BFS:    10.17s
-DFS:    0.04s
-HC:     0.0003s
-
-Test 3:
-A*:     2.49s
-BFS:    2.22s
-DFS:    0.007s
-HC:     0.0002s
-```
-
----
-
-
-
+KẾT LUẬN:
+   • A*: Optimal, hiệu quả với heuristic (count open ends)
+   • Hill Climbing: Nhanh nhưng có thể stuck
+   • BFS: Optimal nhưng chậm, tốn bộ nhớ
+   • DFS: Nhanh nhưng không đảm bảo optimal
